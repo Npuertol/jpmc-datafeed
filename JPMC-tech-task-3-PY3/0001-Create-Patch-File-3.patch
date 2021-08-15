@@ -1,0 +1,160 @@
+From b15dab3d568c1a9ececc725e5c7acdae067366b5 Mon Sep 17 00:00:00 2001
+From: Npuertol <npuertol@stevens.edu>
+Date: Sun, 1 Aug 2021 20:42:47 -0400
+Subject: [PATCH] Create Patch File 3
+
+---
+ datafeed/server3.py    |  4 ++--
+ src/DataManipulator.ts | 37 +++++++++++++++++++++++++------------
+ src/DataStreamer.ts    |  2 +-
+ src/Graph.tsx          | 32 ++++++++++++++++++++------------
+ 4 files changed, 48 insertions(+), 27 deletions(-)
+
+diff --git a/datafeed/server3.py b/datafeed/server3.py
+index 2de4e28..1d59866 100644
+--- a/datafeed/server3.py
++++ b/datafeed/server3.py
+@@ -202,7 +202,7 @@ def get(req_handler, routes):
+                 req_handler.wfile.write(bytes(data,  encoding = 'utf-8'))
+                 return
+ 
+-def run(routes, host = '0.0.0.0', port = 8080):
++def run(routes, host = '0.0.0.0', port = 8085):
+     """ Runs a class as a server whose methods have been decorated with
+         @route.
+     """
+@@ -215,7 +215,7 @@ def run(routes, host = '0.0.0.0', port = 8080):
+     thread = threading.Thread(target = server.serve_forever)
+     thread.daemon = True
+     thread.start()
+-    print ('HTTP server started on port 8080')
++    print ('HTTP server started on port 8085')
+     while True:
+         from time import sleep
+         sleep(1)
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index f6b15ff..41be306 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,33 @@
+ import { ServerRespond } from './DataStreamer';
+ 
+-export interface Row {
+-  stock: string,
+-  top_ask_price: number,
++export interface Row { // modified row interface with new schema elements
++  price_abc: number,
++  price_def: number,
++  ratio: number,
+   timestamp: Date,
++  upper_bound: number,
++  lower_bound: number,
++  trigger_alert: number | undefined,
+ }
+ 
+ 
+-export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]): Row[] {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++export class DataManipulator { // changed return value Row[] to a single Row object
++  static generateRow(serverResponds: ServerRespond[]): Row {
++    // serverRespond[0] = stock ABC, serverRespond[1] = stock DEF
++    const priceABC = (serverResponds[0].top_ask.price + serverResponds[0].top_bid.price) / 2;
++    const priceDEF = (serverResponds[1].top_ask.price + serverResponds[1].top_bid.price) / 2;
++    const ratio = priceABC / priceDEF;
++    const upperBound = 1 + 0.05;
++    const lowerBound = 1 - 0.05;
++    return {
++      price_abc: priceABC,
++      price_def: priceDEF,
++      ratio,
++      timestamp: serverResponds[0].timestamp > serverResponds[1].timestamp ?
++        serverResponds[0].timestamp : serverResponds[1].timestamp,
++      upper_bound: upperBound,
++      lower_bound: lowerBound,
++      trigger_alert: (ratio > upperBound || ratio < lowerBound) ? ratio : undefined,
++    };
+   }
+ }
+diff --git a/src/DataStreamer.ts b/src/DataStreamer.ts
+index 9d9eca7..b9e8319 100644
+--- a/src/DataStreamer.ts
++++ b/src/DataStreamer.ts
+@@ -10,7 +10,7 @@ export interface ServerRespond {
+ }
+ 
+ class DataStreamer {
+-  static API_URL: string = 'http://localhost:8080/query?id=1';
++  static API_URL: string = 'http://localhost:8085/query?id=1';
+ 
+   static getData(callback: (data: ServerRespond[]) => void): void {
+     const request = new XMLHttpRequest();
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 58fb997..539b96d 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -22,11 +22,14 @@ class Graph extends Component<IProps, {}> {
+     // Get element from the DOM.
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
+-    const schema = {
+-      stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++    const schema = { // took out stock, and then put in prices for stocks abc and def which will be used to calculate ratio. upper and lower bounds and trigger alert are essential to monitoring correlation between 2 stocks
++      price_abc: 'float',
++      price_def: 'float',
++      ratio: 'float',
+       timestamp: 'date',
++      upper_bound: 'float',
++      lower_bound: 'float',
++      trigger_alert: 'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+@@ -36,23 +39,28 @@ class Graph extends Component<IProps, {}> {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
++      // took column-pivots out since we do not want to visualize stocks ABC/DEF prices, but instead their ratio
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      // columns focuses on specific part of a datapoint's data along the y-axis
++      elem.setAttribute('columns', '["ratio", "lower_bound", "upper_bound", "trigger_alert"]');
++      // aggregates handles duplicated data and makes them into one data point (data point is only unique if its timestamp is unique)
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        price_abc: 'avg',
++        price_def: 'avg',
++        ratio: 'avg',
+         timestamp: 'distinct count',
++        upper_bound: 'avg',
++        lower_bound: 'avg',
++        trigger_alert: 'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+-    if (this.table) {
+-      this.table.update(
++    if (this.table) { // added brackets within this.table.update(), see line 15 in DataManipulator.ts
++      this.table.update([
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ]);
+     }
+   }
+ }
+-- 
+2.30.0.windows.2
+

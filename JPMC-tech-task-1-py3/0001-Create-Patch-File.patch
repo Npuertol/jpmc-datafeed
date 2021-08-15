@@ -1,0 +1,31 @@
+From c1d8356fa1dea97837df44e3e1278e9a4ebc286c Mon Sep 17 00:00:00 2001
+From: Npuertol <npuertol@stevens.edu>
+Date: Wed, 28 Jul 2021 13:37:47 -0400
+Subject: [PATCH] Create Patch File
+
+---
+ client3.py | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/client3.py b/client3.py
+index 254b32f..5f9fa45 100644
+--- a/client3.py
++++ b/client3.py
+@@ -39,14 +39,6 @@ def getDataPoint(quote):
+     price = (bid_price + ask_price) / 2
+     return stock, bid_price, ask_price, price
+ 
+-# def getRatio(price_a, price_b):
+-# 	""" Get ratio of price_a and price_b """
+-# 	""" ------------- Update this function ------------- """
+-#   if (price_b == 0):
+-#     return
+-# 	""" Also create some unit tests for this function in client_test.py """
+-# 	return
+-
+ 
+ def getRatio(price_a, price_b):
+     if (price_b == 0):
+-- 
+2.30.0.windows.2
+
